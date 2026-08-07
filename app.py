@@ -12,6 +12,7 @@ load_dotenv()
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.config["ADMIN_USER_IDS"] = os.getenv("ADMIN_USER_IDS", "")
 
     allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:4200")
     origins = [origin.strip() for origin in allowed_origins.split(",") if origin.strip()]

@@ -1,9 +1,10 @@
 import uuid
+import logging
 from typing import Any
 
 from flask import Blueprint, jsonify, request
 
-from config.supabase import supabase
+from config.supabase import get_supabase_client, supabase
 from services.user_service import (
     UserServiceError,
     create_profile_if_missing,
@@ -13,6 +14,7 @@ from services.user_service import (
 
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
+logger = logging.getLogger(__name__)
 
 
 def _error(message: str, status_code: int):
@@ -35,31 +37,56 @@ def _validate_uuid(value: str | None) -> bool:
         return False
 
 
-def _current_supabase_user_id() -> tuple[str | None, tuple[Any, int] | None]:
+def _current_supabase_session() -> tuple[str | None, str | None, tuple[Any, int] | None]:
     auth_header = request.headers.get("Authorization", "")
     if not auth_header:
-        return None, _error("No autenticado", 401)
+        return None, None, _error("No autenticado", 401)
 
     scheme, _, token = auth_header.partition(" ")
     if scheme.lower() != "bearer" or not token:
-        return None, _error("Token de autorizacion invalido", 401)
+        return None, None, _error("Token de autorizacion invalido", 401)
 
     try:
         response = supabase.auth.get_user(token)
         user = getattr(response, "user", None)
         user_id = getattr(user, "id", None)
         if not user_id:
-            return None, _error("Token de autorizacion invalido", 401)
-        return user_id, None
+            return None, None, _error("Token de autorizacion invalido", 401)
+        return user_id, token, None
     except Exception:
-        return None, _error("Token de autorizacion invalido", 401)
+        return None, None, _error("Token de autorizacion invalido", 401)
+
+
+def _current_supabase_user_id() -> tuple[str | None, tuple[Any, int] | None]:
+    user_id, _token, error = _current_supabase_session()
+    return user_id, error
+
+
+def _admin_user_ids() -> set[str]:
+    raw_ids = request.app.config.get("ADMIN_USER_IDS", "") if hasattr(request, "app") else ""
+    if not raw_ids:
+        raw_ids = ""
+    return {user_id.strip() for user_id in raw_ids.split(",") if user_id.strip()}
+
+
+def _is_admin(user_id: str) -> bool:
+    return user_id in _admin_user_ids()
 
 
 @users_bp.get("")
 def list_users():
+    auth_user_id, access_token, auth_error = _current_supabase_session()
+    if auth_error:
+        return auth_error
+
+    if not _is_admin(auth_user_id):
+        return _error("No autorizado", 403)
+
     try:
-        return jsonify({"success": True, "users": get_profiles()}), 200
-    except Exception:
+        db = get_supabase_client(access_token)
+        return jsonify({"success": True, "users": get_profiles(db)}), 200
+    except Exception as exc:
+        logger.exception("ERROR list_users: %r", exc)
         return _error("Error interno del servidor", 500)
 
 
@@ -68,18 +95,27 @@ def get_user(user_id: str):
     if not _validate_uuid(user_id):
         return _error("ID de usuario invalido", 400)
 
+    auth_user_id, access_token, auth_error = _current_supabase_session()
+    if auth_error:
+        return auth_error
+
+    if user_id != auth_user_id and not _is_admin(auth_user_id):
+        return _error("No autorizado", 403)
+
     try:
-        user = get_profile_by_id(user_id)
+        db = get_supabase_client(access_token)
+        user = get_profile_by_id(user_id, db)
         if not user:
             return _error("Usuario no encontrado", 404)
         return jsonify({"success": True, "user": user}), 200
-    except Exception:
+    except Exception as exc:
+        logger.exception("ERROR get_user: %r", exc)
         return _error("Error interno del servidor", 500)
 
 
 @users_bp.post("")
 def create_user_profile():
-    auth_user_id, auth_error = _current_supabase_user_id()
+    auth_user_id, access_token, auth_error = _current_supabase_session()
     if auth_error:
         return auth_error
 
@@ -107,10 +143,13 @@ def create_user_profile():
         return _error("URL de avatar invalida", 400)
 
     try:
-        user, created = create_profile_if_missing(body)
+        db = get_supabase_client(access_token)
+        user, created = create_profile_if_missing(body, db)
         status_code = 201 if created else 200
         return jsonify({"success": True, "created": created, "user": user}), status_code
     except UserServiceError as exc:
+        logger.warning("ERROR create_user_profile: %r", exc)
         return _error(exc.message, exc.status_code)
-    except Exception:
+    except Exception as exc:
+        logger.exception("ERROR create_user_profile: %r", exc)
         return _error("Error interno del servidor", 500)

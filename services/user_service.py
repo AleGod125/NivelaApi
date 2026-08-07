@@ -1,6 +1,7 @@
 from typing import Any
 
 from postgrest.exceptions import APIError
+from supabase import Client
 
 from config.supabase import supabase
 
@@ -24,9 +25,10 @@ def _first_row(response: Any) -> dict[str, Any] | None:
     return None
 
 
-def get_profiles() -> list[dict[str, Any]]:
+def get_profiles(client: Client | None = None) -> list[dict[str, Any]]:
+    db = client or supabase
     response = (
-        supabase.table("profiles")
+        db.table("profiles")
         .select(PROFILE_FIELDS)
         .order("created_at", desc=True)
         .execute()
@@ -34,9 +36,10 @@ def get_profiles() -> list[dict[str, Any]]:
     return response.data or []
 
 
-def get_profile_by_id(user_id: str) -> dict[str, Any] | None:
+def get_profile_by_id(user_id: str, client: Client | None = None) -> dict[str, Any] | None:
+    db = client or supabase
     response = (
-        supabase.table("profiles")
+        db.table("profiles")
         .select(PROFILE_FIELDS)
         .eq("id", user_id)
         .limit(1)
@@ -45,8 +48,12 @@ def get_profile_by_id(user_id: str) -> dict[str, Any] | None:
     return _first_row(response)
 
 
-def create_profile_if_missing(profile: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    existing_profile = get_profile_by_id(profile["id"])
+def create_profile_if_missing(
+    profile: dict[str, Any],
+    client: Client | None = None,
+) -> tuple[dict[str, Any], bool]:
+    db = client or supabase
+    existing_profile = get_profile_by_id(profile["id"], db)
     if existing_profile:
         return existing_profile, False
 
@@ -59,7 +66,7 @@ def create_profile_if_missing(profile: dict[str, Any]) -> tuple[dict[str, Any], 
 
     try:
         response = (
-            supabase.table("profiles")
+            db.table("profiles")
             .insert(payload)
             .select(PROFILE_FIELDS)
             .execute()
@@ -69,7 +76,7 @@ def create_profile_if_missing(profile: dict[str, Any]) -> tuple[dict[str, Any], 
             raise UserServiceError("No se pudo crear el perfil")
         return created_profile, True
     except APIError as exc:
-        existing_profile = get_profile_by_id(profile["id"])
+        existing_profile = get_profile_by_id(profile["id"], db)
         if existing_profile:
             return existing_profile, False
 

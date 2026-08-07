@@ -18,3 +18,15 @@ supabase: Client = create_client(
     _required_env("SUPABASE_URL"),
     _required_env("SUPABASE_KEY"),
 )
+
+
+def get_supabase_client(access_token: str | None = None) -> Client:
+    client: Client = create_client(
+        _required_env("SUPABASE_URL"),
+        _required_env("SUPABASE_KEY"),
+    )
+
+    if access_token:
+        client.postgrest.auth(access_token)
+
+    return client
