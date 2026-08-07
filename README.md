@@ -2,9 +2,9 @@
 
 API inicial de Nivela construida con Flask, Python y Supabase.
 
-Supabase Auth maneja la autenticación con email/password, Google OAuth y teléfono + OTP. Esta API no almacena contraseñas, códigos OTP, tokens de Google ni datos sensibles de `auth.users`.
+Supabase Auth maneja la autenticacion con email/password, Google OAuth y telefono + OTP. Flask no almacena passwords, OTP, tokens de Google ni datos sensibles de `auth.users`.
 
-## Instalación
+## Instalacion
 
 ```bash
 pip install -r requirements.txt
@@ -12,19 +12,21 @@ pip install -r requirements.txt
 
 ## Variables de entorno
 
-Debe existir un archivo `.env` en `backend/`:
+Debe existir un archivo `.env` local o variables configuradas en Render:
 
 ```env
 SUPABASE_URL=
 SUPABASE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ALLOWED_ORIGINS=http://localhost:4200
+ADMIN_USER_IDS=
 ```
 
-`SUPABASE_KEY` debe ser la publishable key para operaciones normales desde el backend. Si más adelante una operación necesita privilegios administrativos, utiliza una variable separada como `SUPABASE_SERVICE_ROLE_KEY` y nunca la expongas en Angular.
+`SUPABASE_KEY` es la publishable key utilizada para validar usuarios con Supabase Auth.
 
-## Ejecución
+`SUPABASE_SERVICE_ROLE_KEY` se usa solo en Flask para operaciones internas sobre `public.profiles`. Nunca debe enviarse al frontend, imprimirse en logs, hardcodearse ni subirse al repositorio.
 
-Desde la carpeta `backend/`:
+## Ejecucion
 
 ```bash
 python app.py
@@ -47,7 +49,7 @@ POST /api/users
 
 ### GET /api/health
 
-Response:
+Verifica que Flask este funcionando.
 
 ```json
 {
@@ -56,65 +58,18 @@ Response:
 }
 ```
 
-### GET /api/users
-
-Devuelve perfiles existentes en `public.profiles`. No devuelve información sensible de `auth.users`.
-
-Response:
-
-```json
-{
-  "success": true,
-  "users": [
-    {
-      "id": "550e8400-e29b-41d4-a716-446655440000",
-      "username": "alejandro",
-      "full_name": "Alejandro Navarro",
-      "avatar_url": null,
-      "created_at": "2026-08-06T17:00:00+00:00",
-      "updated_at": "2026-08-06T17:00:00+00:00"
-    }
-  ]
-}
-```
-
-### GET /api/users/<user_id>
-
-Response:
-
-```json
-{
-  "success": true,
-  "user": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "alejandro",
-    "full_name": "Alejandro Navarro",
-    "avatar_url": null,
-    "created_at": "2026-08-06T17:00:00+00:00",
-    "updated_at": "2026-08-06T17:00:00+00:00"
-  }
-}
-```
-
-Si no existe:
-
-```json
-{
-  "success": false,
-  "error": "Usuario no encontrado"
-}
-```
-
 ### POST /api/users
 
-Crea el perfil de Nivela para un usuario ya autenticado en Supabase. La operación es idempotente: si el perfil existe, devuelve el perfil existente.
+Crea o devuelve el perfil de Nivela para un usuario autenticado en Supabase. Es idempotente.
 
-Request:
+Headers:
 
 ```http
 Authorization: Bearer <supabase_access_token>
 Content-Type: application/json
 ```
+
+Body:
 
 ```json
 {
@@ -140,7 +95,7 @@ Creado:
 }
 ```
 
-Ya existía:
+Ya existia:
 
 ```json
 {
@@ -155,17 +110,19 @@ Ya existía:
 }
 ```
 
-## Arquitectura
+### GET /api/users
 
-```text
-backend/
-├── app.py
-├── config/
-│   └── supabase.py
-├── routes/
-│   └── users.py
-└── services/
-    └── user_service.py
-```
+Lista perfiles. Requiere Bearer token y que el usuario autenticado este incluido en `ADMIN_USER_IDS`.
 
-La API está preparada para recibir `Authorization: Bearer <supabase_access_token>` y validar la identidad con Supabase antes de crear perfiles.
+### GET /api/users/<user_id>
+
+Devuelve un perfil por id. Requiere Bearer token. Un usuario puede consultar su propio perfil; usuarios en `ADMIN_USER_IDS` pueden consultar otros perfiles.
+
+## Arquitectura Supabase
+
+`config/supabase.py` separa dos clientes:
+
+- `supabase_auth`: usa `SUPABASE_KEY` para validar `Authorization: Bearer <supabase_access_token>` mediante Supabase Auth.
+- `supabase_admin`: se crea de forma lazy con `SUPABASE_SERVICE_ROLE_KEY` para operar sobre `public.profiles` desde Flask despues de validar identidad.
+
+RLS permanece activado. La Service Role Key evita que Flask quede bloqueado por policies de usuario al crear perfiles, sin darle privilegios administrativos al frontend.

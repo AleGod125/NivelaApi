@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from supabase import Client, create_client
@@ -14,19 +15,18 @@ def _required_env(name: str) -> str:
     return value
 
 
-supabase: Client = create_client(
+supabase_auth: Client = create_client(
     _required_env("SUPABASE_URL"),
     _required_env("SUPABASE_KEY"),
 )
 
+# Backwards-compatible name for code that validates Supabase Auth tokens.
+supabase = supabase_auth
 
-def get_supabase_client(access_token: str | None = None) -> Client:
-    client: Client = create_client(
+
+@lru_cache(maxsize=1)
+def get_supabase_admin_client() -> Client:
+    return create_client(
         _required_env("SUPABASE_URL"),
-        _required_env("SUPABASE_KEY"),
+        _required_env("SUPABASE_SERVICE_ROLE_KEY"),
     )
-
-    if access_token:
-        client.postgrest.auth(access_token)
-
-    return client

@@ -2,9 +2,9 @@ import uuid
 import logging
 from typing import Any
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from config.supabase import get_supabase_client, supabase
+from config.supabase import supabase_auth
 from services.user_service import (
     UserServiceError,
     create_profile_if_missing,
@@ -47,7 +47,7 @@ def _current_supabase_session() -> tuple[str | None, str | None, tuple[Any, int]
         return None, None, _error("Token de autorizacion invalido", 401)
 
     try:
-        response = supabase.auth.get_user(token)
+        response = supabase_auth.auth.get_user(token)
         user = getattr(response, "user", None)
         user_id = getattr(user, "id", None)
         if not user_id:
@@ -63,9 +63,7 @@ def _current_supabase_user_id() -> tuple[str | None, tuple[Any, int] | None]:
 
 
 def _admin_user_ids() -> set[str]:
-    raw_ids = request.app.config.get("ADMIN_USER_IDS", "") if hasattr(request, "app") else ""
-    if not raw_ids:
-        raw_ids = ""
+    raw_ids = current_app.config.get("ADMIN_USER_IDS", "")
     return {user_id.strip() for user_id in raw_ids.split(",") if user_id.strip()}
 
 
@@ -75,7 +73,7 @@ def _is_admin(user_id: str) -> bool:
 
 @users_bp.get("")
 def list_users():
-    auth_user_id, access_token, auth_error = _current_supabase_session()
+    auth_user_id, _access_token, auth_error = _current_supabase_session()
     if auth_error:
         return auth_error
 
@@ -83,8 +81,7 @@ def list_users():
         return _error("No autorizado", 403)
 
     try:
-        db = get_supabase_client(access_token)
-        return jsonify({"success": True, "users": get_profiles(db)}), 200
+        return jsonify({"success": True, "users": get_profiles()}), 200
     except Exception as exc:
         logger.exception("ERROR list_users: %r", exc)
         return _error("Error interno del servidor", 500)
@@ -95,7 +92,7 @@ def get_user(user_id: str):
     if not _validate_uuid(user_id):
         return _error("ID de usuario invalido", 400)
 
-    auth_user_id, access_token, auth_error = _current_supabase_session()
+    auth_user_id, _access_token, auth_error = _current_supabase_session()
     if auth_error:
         return auth_error
 
@@ -103,8 +100,7 @@ def get_user(user_id: str):
         return _error("No autorizado", 403)
 
     try:
-        db = get_supabase_client(access_token)
-        user = get_profile_by_id(user_id, db)
+        user = get_profile_by_id(user_id)
         if not user:
             return _error("Usuario no encontrado", 404)
         return jsonify({"success": True, "user": user}), 200
@@ -115,7 +111,7 @@ def get_user(user_id: str):
 
 @users_bp.post("")
 def create_user_profile():
-    auth_user_id, access_token, auth_error = _current_supabase_session()
+    auth_user_id, _access_token, auth_error = _current_supabase_session()
     if auth_error:
         return auth_error
 
@@ -143,8 +139,7 @@ def create_user_profile():
         return _error("URL de avatar invalida", 400)
 
     try:
-        db = get_supabase_client(access_token)
-        user, created = create_profile_if_missing(body, db)
+        user, created = create_profile_if_missing(body)
         status_code = 201 if created else 200
         return jsonify({"success": True, "created": created, "user": user}), status_code
     except UserServiceError as exc:

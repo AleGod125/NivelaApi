@@ -1,12 +1,14 @@
+import logging
 from typing import Any
 
 from postgrest.exceptions import APIError
 from supabase import Client
 
-from config.supabase import supabase
+from config.supabase import get_supabase_admin_client
 
 
 PROFILE_FIELDS = "id, username, full_name, avatar_url, created_at, updated_at"
+logger = logging.getLogger(__name__)
 
 
 class UserServiceError(Exception):
@@ -25,8 +27,21 @@ def _first_row(response: Any) -> dict[str, Any] | None:
     return None
 
 
+def _client(client: Client | None = None) -> Client:
+    return client or get_supabase_admin_client()
+
+
+def _safe_api_error(exc: APIError) -> dict[str, Any]:
+    return {
+        "code": getattr(exc, "code", None),
+        "message": getattr(exc, "message", str(exc)),
+        "details": getattr(exc, "details", None),
+        "hint": getattr(exc, "hint", None),
+    }
+
+
 def get_profiles(client: Client | None = None) -> list[dict[str, Any]]:
-    db = client or supabase
+    db = _client(client)
     response = (
         db.table("profiles")
         .select(PROFILE_FIELDS)
@@ -37,7 +52,7 @@ def get_profiles(client: Client | None = None) -> list[dict[str, Any]]:
 
 
 def get_profile_by_id(user_id: str, client: Client | None = None) -> dict[str, Any] | None:
-    db = client or supabase
+    db = _client(client)
     response = (
         db.table("profiles")
         .select(PROFILE_FIELDS)
@@ -52,7 +67,7 @@ def create_profile_if_missing(
     profile: dict[str, Any],
     client: Client | None = None,
 ) -> tuple[dict[str, Any], bool]:
-    db = client or supabase
+    db = _client(client)
     existing_profile = get_profile_by_id(profile["id"], db)
     if existing_profile:
         return existing_profile, False
@@ -66,7 +81,7 @@ def create_profile_if_missing(
 
     try:
         response = (
-            supabase.table("profiles")
+            db.table("profiles")
             .insert(payload)
             .select(PROFILE_FIELDS)
             .execute()
@@ -80,10 +95,9 @@ def create_profile_if_missing(
         return created_profile, True
 
     except APIError as exc:
-        print("SUPABASE API ERROR:", repr(exc))
-        print("SUPABASE API ERROR MESSAGE:", str(exc))
+        logger.error("SUPABASE API ERROR create_profile_if_missing: %s", _safe_api_error(exc))
 
-        existing_profile = get_profile_by_id(profile["id"])
+        existing_profile = get_profile_by_id(profile["id"], db)
 
         if existing_profile:
             return existing_profile, False
