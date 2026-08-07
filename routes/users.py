@@ -10,11 +10,22 @@ from services.user_service import (
     create_profile_if_missing,
     get_profile_by_id,
     get_profiles,
+    update_profile,
 )
 
 
 users_bp = Blueprint("users", __name__, url_prefix="/api/users")
 logger = logging.getLogger(__name__)
+VALID_USER_TYPES = {"student", "professional", "specialized"}
+PATCH_PROFILE_FIELDS = {
+    "username",
+    "full_name",
+    "avatar_url",
+    "user_type",
+    "career",
+    "specialization",
+}
+PROTECTED_PROFILE_FIELDS = {"id", "created_at"}
 
 
 def _error(message: str, status_code: int):
@@ -69,6 +80,65 @@ def _admin_user_ids() -> set[str]:
 
 def _is_admin(user_id: str) -> bool:
     return user_id in _admin_user_ids()
+
+
+def _validate_nullable_string(value: Any, max_length: int, field_name: str):
+    if value is not None and (not isinstance(value, str) or len(value) > max_length):
+        return _error(f"{field_name} invalido", 400)
+    return None
+
+
+def _validate_profile_fields(body: dict[str, Any], partial: bool = False):
+    if "username" in body or not partial:
+        error = _validate_nullable_string(body.get("username"), 50, "Username")
+        if error:
+            return error
+
+    if "full_name" in body or not partial:
+        error = _validate_nullable_string(body.get("full_name"), 120, "Nombre completo")
+        if error:
+            return error
+
+    if "avatar_url" in body or not partial:
+        error = _validate_nullable_string(body.get("avatar_url"), 500, "URL de avatar")
+        if error:
+            return error
+
+    if "user_type" in body or not partial:
+        user_type = body.get("user_type")
+        if user_type is not None and user_type not in VALID_USER_TYPES:
+            return _error("Tipo de usuario invalido", 400)
+
+    if "career" in body or not partial:
+        error = _validate_nullable_string(body.get("career"), 120, "Career")
+        if error:
+            return error
+
+    if "specialization" in body or not partial:
+        error = _validate_nullable_string(body.get("specialization"), 120, "Specialization")
+        if error:
+            return error
+
+    return None
+
+
+def _patch_changes(body: dict[str, Any]) -> tuple[dict[str, Any] | None, tuple[Any, int] | None]:
+    protected_fields = PROTECTED_PROFILE_FIELDS.intersection(body)
+    if protected_fields:
+        return None, _error("No se permite modificar campos protegidos", 400)
+
+    unknown_fields = set(body) - PATCH_PROFILE_FIELDS
+    if unknown_fields:
+        return None, _error("Campos no permitidos en el perfil", 400)
+
+    if not body:
+        return None, _error("No hay campos para actualizar", 400)
+
+    validation_error = _validate_profile_fields(body, partial=True)
+    if validation_error:
+        return None, validation_error
+
+    return {field: body[field] for field in PATCH_PROFILE_FIELDS if field in body}, None
 
 
 @users_bp.get("")
@@ -126,17 +196,9 @@ def create_user_profile():
     if requested_user_id != auth_user_id:
         return _error("No autorizado para modificar este usuario", 403)
 
-    username = body.get("username")
-    if username is not None and (not isinstance(username, str) or len(username) > 50):
-        return _error("Username invalido", 400)
-
-    full_name = body.get("full_name")
-    if full_name is not None and (not isinstance(full_name, str) or len(full_name) > 120):
-        return _error("Nombre completo invalido", 400)
-
-    avatar_url = body.get("avatar_url")
-    if avatar_url is not None and (not isinstance(avatar_url, str) or len(avatar_url) > 500):
-        return _error("URL de avatar invalida", 400)
+    validation_error = _validate_profile_fields(body)
+    if validation_error:
+        return validation_error
 
     try:
         user, created = create_profile_if_missing(body)
@@ -147,4 +209,31 @@ def create_user_profile():
         return _error(exc.message, exc.status_code)
     except Exception as exc:
         logger.exception("ERROR create_user_profile: %r", exc)
+        return _error("Error interno del servidor", 500)
+
+
+@users_bp.patch("/me")
+def update_my_profile():
+    auth_user_id, _access_token, auth_error = _current_supabase_session()
+    if auth_error:
+        return auth_error
+
+    body = _json_body()
+    if body is None:
+        return _error("El cuerpo de la solicitud debe ser JSON", 400)
+
+    changes, validation_error = _patch_changes(body)
+    if validation_error:
+        return validation_error
+
+    try:
+        user = update_profile(auth_user_id, changes)
+        if not user:
+            return _error("Usuario no encontrado", 404)
+        return jsonify({"success": True, "user": user}), 200
+    except UserServiceError as exc:
+        logger.warning("ERROR update_my_profile: %r", exc)
+        return _error(exc.message, exc.status_code)
+    except Exception as exc:
+        logger.exception("ERROR update_my_profile: %r", exc)
         return _error("Error interno del servidor", 500)

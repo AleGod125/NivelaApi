@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from postgrest.exceptions import APIError
@@ -7,7 +8,11 @@ from supabase import Client
 from config.supabase import get_supabase_admin_client
 
 
-PROFILE_FIELDS = "id, username, full_name, avatar_url, created_at, updated_at"
+PROFILE_FIELDS = (
+    "id, username, full_name, avatar_url, "
+    "user_type, career, specialization, "
+    "created_at, updated_at"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -77,6 +82,9 @@ def create_profile_if_missing(
         "username": profile.get("username"),
         "full_name": profile.get("full_name"),
         "avatar_url": profile.get("avatar_url"),
+        "user_type": profile.get("user_type"),
+        "career": profile.get("career"),
+        "specialization": profile.get("specialization"),
     }
 
     try:
@@ -114,3 +122,32 @@ def create_profile_if_missing(
             "Error al crear el perfil",
             500
         ) from exc
+
+
+def update_profile(user_id: str, changes: dict[str, Any]) -> dict[str, Any] | None:
+    db = _client()
+    payload = {
+        **changes,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        response = (
+            db.table("profiles")
+            .update(payload)
+            .eq("id", user_id)
+            .select(PROFILE_FIELDS)
+            .execute()
+        )
+        return _first_row(response)
+    except APIError as exc:
+        logger.error("SUPABASE API ERROR update_profile: %s", _safe_api_error(exc))
+
+        message = str(exc)
+        if "duplicate" in message.lower() or "unique" in message.lower():
+            raise UserServiceError(
+                "El username ya esta en uso o el perfil genera un conflicto",
+                409,
+            ) from exc
+
+        raise UserServiceError("Error al actualizar el perfil", 500) from exc
