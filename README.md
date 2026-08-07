@@ -50,6 +50,10 @@ GET  /api/exercises/catalog
 GET  /api/exercises
 GET  /api/exercises/<exercise_id>
 POST /api/exercises/<exercise_id>/check
+GET  /api/learning-map
+POST /api/training/session
+GET  /api/training/session/<session_id>/next
+POST /api/training/session/<session_id>/answer
 ```
 
 ### GET /api/health
@@ -156,6 +160,44 @@ curl -X POST http://localhost:5000/api/exercises/<exercise_id>/check \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d "{\"answer\":\"d\"}"
+```
+
+### GET /api/learning-map
+
+Devuelve niveles y modulos generados desde backend para la carrera y especializacion del usuario autenticado.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/learning-map
+```
+
+### POST /api/training/session
+
+Inicia una sesion temporal de modulo y devuelve la primera pregunta sin `solution`.
+
+```bash
+curl -X POST http://localhost:5000/api/training/session \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"difficulty\":1,\"module\":1}"
+```
+
+### GET /api/training/session/<session_id>/next
+
+Devuelve otra pregunta aleatoria de la sesion, priorizando preguntas no vistas.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/training/session/<session_id>/next
+```
+
+### POST /api/training/session/<session_id>/answer
+
+Corrige la pregunta actual, actualiza contadores en la sesion temporal y devuelve feedback.
+
+```bash
+curl -X POST http://localhost:5000/api/training/session/<session_id>/answer \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"exercise_id\":\"<exercise_id>\",\"answer\":\"d\"}"
 ```
 
 ## Arquitectura Supabase

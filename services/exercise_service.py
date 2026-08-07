@@ -94,6 +94,10 @@ def _require_profile_context(user_id: str) -> dict[str, str]:
     }
 
 
+def get_user_exercise_context(user_id: str) -> dict[str, str]:
+    return _require_profile_context(user_id)
+
+
 def _base_query(fields: str, context: dict[str, str]):
     return (
         get_supabase_admin_client()
@@ -193,6 +197,31 @@ def list_exercises(user_id: str, filters: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def list_published_exercises_for_difficulty(
+    user_id: str,
+    difficulty: int,
+    include_solution: bool = False,
+) -> dict[str, Any]:
+    context = _require_profile_context(user_id)
+    fields = CHECK_EXERCISE_FIELDS if include_solution else PUBLIC_EXERCISE_FIELDS
+
+    try:
+        response = (
+            _base_query(fields, context)
+            .eq("difficulty", difficulty)
+            .execute()
+        )
+    except APIError as exc:
+        logger.error("SUPABASE API ERROR list_published_exercises_for_difficulty: %s", _safe_api_error(exc))
+        raise ExerciseServiceError("Error al obtener ejercicios", 500) from exc
+
+    return {
+        "career": context["career"],
+        "specialization": context["specialization"],
+        "exercises": response.data or [],
+    }
+
+
 def get_exercise_for_user(user_id: str, exercise_id: str, include_solution: bool = False) -> dict[str, Any] | None:
     context = _require_profile_context(user_id)
     fields = CHECK_EXERCISE_FIELDS if include_solution else PUBLIC_EXERCISE_FIELDS
@@ -255,9 +284,16 @@ def _check_matching_answer(matches: Any, solution: dict[str, Any]) -> bool:
     return normalized_matches == normalized_expected
 
 
-def check_exercise_answer(user_id: str, exercise_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
+def check_exercise_answer(
+    user_id: str,
+    exercise_id: str,
+    body: dict[str, Any],
+    expected_difficulty: int | None = None,
+) -> dict[str, Any] | None:
     exercise = get_exercise_for_user(user_id, exercise_id, include_solution=True)
     if not exercise:
+        return None
+    if expected_difficulty is not None and exercise.get("difficulty") != expected_difficulty:
         return None
 
     solution = exercise.get("solution") or {}
