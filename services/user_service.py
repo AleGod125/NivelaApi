@@ -66,24 +66,37 @@ def create_profile_if_missing(
 
     try:
         response = (
-            db.table("profiles")
+            supabase.table("profiles")
             .insert(payload)
             .select(PROFILE_FIELDS)
             .execute()
         )
+
         created_profile = _first_row(response)
+
         if not created_profile:
             raise UserServiceError("No se pudo crear el perfil")
+
         return created_profile, True
+
     except APIError as exc:
-        existing_profile = get_profile_by_id(profile["id"], db)
+        print("SUPABASE API ERROR:", repr(exc))
+        print("SUPABASE API ERROR MESSAGE:", str(exc))
+
+        existing_profile = get_profile_by_id(profile["id"])
+
         if existing_profile:
             return existing_profile, False
 
         message = str(exc)
+
         if "duplicate" in message.lower() or "unique" in message.lower():
             raise UserServiceError(
                 "El username ya esta en uso o el perfil genera un conflicto",
                 409,
             ) from exc
-        raise UserServiceError("Error al crear el perfil", 500) from exc
+
+        raise UserServiceError(
+            "Error al crear el perfil",
+            500
+        ) from exc
