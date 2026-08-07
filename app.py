@@ -14,13 +14,21 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["ADMIN_USER_IDS"] = os.getenv("ADMIN_USER_IDS", "")
 
-    allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:4200")
-    origins = [origin.strip() for origin in allowed_origins.split(",") if origin.strip()]
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "*")
+    if allowed_origins.strip() == "*":
+        origins = "*"
+    else:
+        origins = [
+            origin.strip().rstrip("/")
+            for origin in allowed_origins.split(",")
+            if origin.strip()
+        ]
 
     CORS(
         app,
         resources={r"/api/*": {"origins": origins}},
-        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization"],
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     )
 
     app.register_blueprint(users_bp)
