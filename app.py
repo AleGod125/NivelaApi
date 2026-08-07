@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from routes.exercises import exercises_bp
 from routes.users import users_bp
 
 
@@ -32,6 +33,7 @@ def create_app() -> Flask:
     )
 
     app.register_blueprint(users_bp)
+    app.register_blueprint(exercises_bp)
 
     @app.get("/api/health")
     def health_check():

@@ -45,6 +45,11 @@ GET  /api/health
 GET  /api/users
 GET  /api/users/<user_id>
 POST /api/users
+PATCH /api/users/me
+GET  /api/exercises/catalog
+GET  /api/exercises
+GET  /api/exercises/<exercise_id>
+POST /api/exercises/<exercise_id>/check
 ```
 
 ### GET /api/health
@@ -117,6 +122,41 @@ Lista perfiles. Requiere Bearer token y que el usuario autenticado este incluido
 ### GET /api/users/<user_id>
 
 Devuelve un perfil por id. Requiere Bearer token. Un usuario puede consultar su propio perfil; usuarios en `ADMIN_USER_IDS` pueden consultar otros perfiles.
+
+### GET /api/exercises/catalog
+
+Devuelve niveles y categorias disponibles para la carrera y especializacion del perfil autenticado.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/exercises/catalog
+```
+
+### GET /api/exercises
+
+Lista ejercicios publicados sin `solution` ni `explanation`. Los filtros disponibles son `difficulty`, `category` y `type`.
+
+```bash
+curl -H "Authorization: Bearer <token>" "http://localhost:5000/api/exercises?difficulty=1&category=anatomia_cardiaca"
+```
+
+### GET /api/exercises/<exercise_id>
+
+Devuelve un ejercicio publicado sin `solution` ni `explanation`, siempre que pertenezca a la carrera/especializacion del usuario.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/exercises/<exercise_id>
+```
+
+### POST /api/exercises/<exercise_id>/check
+
+Corrige una respuesta usando `solution` internamente y devuelve solo si fue correcta y la explicacion.
+
+```bash
+curl -X POST http://localhost:5000/api/exercises/<exercise_id>/check \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"answer\":\"d\"}"
+```
 
 ## Arquitectura Supabase
 
