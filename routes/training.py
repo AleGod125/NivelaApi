@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from routes.users import _current_supabase_user_id
 from services.exercise_service import ExerciseServiceError
+from services.progress_service import ProgressServiceError
 from services.training_service import (
     TrainingServiceError,
     answer_training_exercise,
@@ -62,7 +63,7 @@ def create_session():
     try:
         data = start_training_session(auth_user_id, difficulty, module_number)
         return jsonify({"success": True, **data}), 201
-    except (ExerciseServiceError, TrainingServiceError) as exc:
+    except (ExerciseServiceError, ProgressServiceError, TrainingServiceError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception as exc:
         logger.exception("ERROR create_training_session: %r", exc)
@@ -78,7 +79,7 @@ def next_exercise(session_id: str):
     try:
         data = get_next_exercise(auth_user_id, session_id)
         return jsonify({"success": True, **data}), 200
-    except (ExerciseServiceError, TrainingServiceError) as exc:
+    except (ExerciseServiceError, ProgressServiceError, TrainingServiceError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception as exc:
         logger.exception("ERROR next_training_exercise: %r", exc)
@@ -98,7 +99,7 @@ def answer_exercise(session_id: str):
     try:
         data = answer_training_exercise(auth_user_id, session_id, body)
         return jsonify({"success": True, **data}), 200
-    except (ExerciseServiceError, TrainingServiceError) as exc:
+    except (ExerciseServiceError, ProgressServiceError, TrainingServiceError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception as exc:
         logger.exception("ERROR answer_training_exercise: %r", exc)

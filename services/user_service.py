@@ -10,7 +10,7 @@ from config.supabase import get_supabase_admin_client
 
 PROFILE_FIELDS = (
     "id, username, full_name, avatar_url, "
-    "user_type, career, specialization, "
+    "user_type, career, specialization, total_xp, plan, "
     "created_at, updated_at"
 )
 logger = logging.getLogger(__name__)
@@ -85,6 +85,8 @@ def create_profile_if_missing(
         "user_type": profile.get("user_type"),
         "career": profile.get("career"),
         "specialization": profile.get("specialization"),
+        "total_xp": 0,
+        "plan": "normal",
     }
 
     try:

@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify
 
 from routes.users import _current_supabase_user_id
 from services.exercise_service import ExerciseServiceError
-from services.training_service import TrainingServiceError, build_learning_map
+from services.progress_service import ProgressServiceError, build_learning_map
 
 
 learning_bp = Blueprint("learning", __name__, url_prefix="/api")
@@ -24,7 +24,7 @@ def learning_map():
     try:
         data = build_learning_map(auth_user_id)
         return jsonify({"success": True, **data}), 200
-    except (ExerciseServiceError, TrainingServiceError) as exc:
+    except (ExerciseServiceError, ProgressServiceError) as exc:
         return _error(exc.message, exc.status_code)
     except Exception as exc:
         logger.exception("ERROR learning_map: %r", exc)

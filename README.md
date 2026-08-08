@@ -54,6 +54,10 @@ GET  /api/learning-map
 POST /api/training/session
 GET  /api/training/session/<session_id>/next
 POST /api/training/session/<session_id>/answer
+GET  /api/billing/me
+POST /api/billing/subscribe
+POST /api/billing/cancel
+POST /api/billing/webhook
 ```
 
 ### GET /api/health
@@ -164,7 +168,7 @@ curl -X POST http://localhost:5000/api/exercises/<exercise_id>/check \
 
 ### GET /api/learning-map
 
-Devuelve niveles y modulos generados desde backend para la carrera y especializacion del usuario autenticado.
+Devuelve niveles y modulos desde `user_module_progress` para la carrera y especializacion del usuario autenticado. Si el usuario aun no tiene progreso para esa ruta profesional, lo inicializa de forma idempotente.
 
 ```bash
 curl -H "Authorization: Bearer <token>" http://localhost:5000/api/learning-map
@@ -183,7 +187,7 @@ curl -X POST http://localhost:5000/api/training/session \
 
 ### GET /api/training/session/<session_id>/next
 
-Devuelve otra pregunta aleatoria de la sesion, priorizando preguntas no vistas.
+Devuelve otra pregunta aleatoria de la sesion, priorizando preguntas no vistas. No devuelve `solution`.
 
 ```bash
 curl -H "Authorization: Bearer <token>" http://localhost:5000/api/training/session/<session_id>/next
@@ -191,13 +195,62 @@ curl -H "Authorization: Bearer <token>" http://localhost:5000/api/training/sessi
 
 ### POST /api/training/session/<session_id>/answer
 
-Corrige la pregunta actual, actualiza contadores en la sesion temporal y devuelve feedback.
+Corrige la pregunta actual, actualiza contadores en la sesion temporal, suma XP por respuesta correcta y completa/desbloquea modulos cuando alcanza el objetivo.
 
 ```bash
 curl -X POST http://localhost:5000/api/training/session/<session_id>/answer \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d "{\"exercise_id\":\"<exercise_id>\",\"answer\":\"d\"}"
+```
+
+XP actual:
+
+```text
+respuesta correcta: +5 XP
+primera completacion de modulo: +50 XP
+Nivela Plus: XP x2
+```
+
+El bonus de completacion solo se entrega la primera vez. Repetir un modulo completado permite practicar y ganar XP por respuestas correctas, pero no duplica el bonus. El multiplicador de XP lo decide el backend leyendo `profiles.plan`.
+
+### GET /api/billing/me
+
+Devuelve el plan actual y beneficios.
+
+```bash
+curl -H "Authorization: Bearer <token>" http://localhost:5000/api/billing/me
+```
+
+### POST /api/billing/subscribe
+
+Crea una suscripcion Mercado Pago para Nivela Plus desde backend y devuelve solo la URL de checkout.
+
+```bash
+curl -X POST http://localhost:5000/api/billing/subscribe \
+  -H "Authorization: Bearer <token>"
+```
+
+### POST /api/billing/cancel
+
+Solicita cancelar la suscripcion en Mercado Pago y sincroniza el estado real con backend.
+
+```bash
+curl -X POST http://localhost:5000/api/billing/cancel \
+  -H "Authorization: Bearer <token>"
+```
+
+### POST /api/billing/webhook
+
+Endpoint publico para Mercado Pago. Valida `x-signature`/`x-request-id`, consulta la suscripcion real en Mercado Pago y sincroniza `user_subscriptions` + `profiles.plan`.
+
+Variables requeridas para billing:
+
+```env
+MERCADO_PAGO_ACCESS_TOKEN=
+MERCADO_PAGO_PLUS_PLAN_ID=
+MERCADO_PAGO_WEBHOOK_SECRET=
+FRONTEND_URL=
 ```
 
 ## Arquitectura Supabase

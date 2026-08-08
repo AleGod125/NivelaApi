@@ -26,6 +26,7 @@ PATCH_PROFILE_FIELDS = {
     "specialization",
 }
 PROTECTED_PROFILE_FIELDS = {"id", "created_at"}
+IGNORED_PROFILE_FIELDS = {"plan", "total_xp"}
 
 
 def _error(message: str, status_code: int):
@@ -123,6 +124,8 @@ def _validate_profile_fields(body: dict[str, Any], partial: bool = False):
 
 
 def _patch_changes(body: dict[str, Any]) -> tuple[dict[str, Any] | None, tuple[Any, int] | None]:
+    body = {key: value for key, value in body.items() if key not in IGNORED_PROFILE_FIELDS}
+
     protected_fields = PROTECTED_PROFILE_FIELDS.intersection(body)
     if protected_fields:
         return None, _error("No se permite modificar campos protegidos", 400)

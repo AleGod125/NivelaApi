@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from routes.billing import billing_bp
 from routes.exercises import exercises_bp
 from routes.learning import learning_bp
 from routes.training import training_bp
@@ -38,6 +39,7 @@ def create_app() -> Flask:
     app.register_blueprint(exercises_bp)
     app.register_blueprint(learning_bp)
     app.register_blueprint(training_bp)
+    app.register_blueprint(billing_bp)
 
     @app.get("/api/health")
     def health_check():
